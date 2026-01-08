@@ -17,14 +17,15 @@ Internet Gateway: Allows Lambda access to external APIs (e.g., Facebook API).
 ```
 
 
-🧱 Main components
+🧱 Features
 ```
-✅ Public Subnets
-✅ Internet Gateway (IGW)
-✅ Lambda Function (ETL)
-✅ Security Group
-✅ PostgreSQL RDS
+✅ Fully automated provisioning with Terraform
+✅ High availability using multiple subnets in different Availability Zones
+✅ Secure connectivity between Lambda and RDS
+✅ Configurable environment variables for database credentials
+✅ Easy to extend for other JSON data source
 ```
+
 
 
 🚀 Deployment Options
