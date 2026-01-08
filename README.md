@@ -4,15 +4,20 @@
 ## AWS Architecture for Lambda ETL
 
 
-
-
-
-🧱  Key Features and Purpose
+🧱 Main components
 ```
-✔ Multi-cloud provisioning
-✔ Platform engineering / Internal Developer Platforms
-✔ Abstractions over infrastructure
-✔ GitOps-driven infra
-✔ Drift detection
-✔ Long-lived infrastructure
+
+✅ Public Subnets
+✅ Internet Gateway (IGW)
+✅ Lambda Function (ETL)
+✅ Security Group
+✅ PostgreSQL RDS
+
 ```
+
+🚀 Deployment Options
+
+terraform init
+terraform validate
+terraform plan -var-file="template.tfvars"
+terraform apply -var-file="template.tfvars" -auto-approve
