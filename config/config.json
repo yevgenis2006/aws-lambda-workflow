@@ -1,7 +1,7 @@
 
 {
   "s3": {
-    "bucket_name": "etl_bucket",
+    "bucket_name": "facebook-etl-bucket",
     "folder_path": "etl-data",
     "file_name": "facebook_file.json"
   },
