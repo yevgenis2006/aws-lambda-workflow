@@ -1,0 +1,16 @@
+
+{
+  "s3": {
+    "bucket_name": "etl_bucket",
+    "folder_path": "etl-data",
+    "file_name": "facebook_file.json"
+  },
+  "database": {
+    "host": "postgres-etl.c50aw8220sd9.us-west-2.rds.amazonaws.com",
+    "database": "facebook",
+    "username": "postgres",
+    "password": "Tegrity123!",
+    "port": 5432
+  },
+  "batch_size": 1000
+}
