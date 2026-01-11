@@ -3,40 +3,72 @@ provider "aws" {
   region = "us-west-2"
 }
 
-# Create a VPC
+# --- DATA: availability zones ---
+data "aws_availability_zones" "available" {}
+
+# --- VPC ---
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
+
   tags = {
     Name = "lambda-vpc"
   }
 }
 
-# Create Internet Gateway
+# --- Internet Gateway ---
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
+
   tags = {
     Name = "lambda-igw"
   }
 }
 
-# Create public subnets
-resource "aws_subnet" "public_a" {
+# --- Public Subnets ---
+resource "aws_subnet" "public" {
+  count                   = 2
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-west-2a"
+  cidr_block              = cidrsubnet(aws_vpc.main.cidr_block, 8, count.index)
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
+
+  tags = {
+    Name = "public-subnet-${count.index}"
+  }
 }
 
-resource "aws_subnet" "public_b" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "us-west-2b"
-  map_public_ip_on_launch = true
+# --- Private Subnets ---
+resource "aws_subnet" "private" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 8, count.index + 10)
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+
+  tags = {
+    Name = "private-subnet-${count.index}"
+  }
 }
 
-# Route table for public subnets
+# --- Elastic IP for NAT Gateway ---
+resource "aws_eip" "nat" {
+  #vpc = true
+  depends_on = [aws_internet_gateway.igw]
+}
+
+# --- NAT Gateway ---
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public[0].id
+  depends_on    = [aws_internet_gateway.igw]
+
+  tags = {
+    Name = "lambda-nat"
+  }
+}
+
+# --- Route Table for Public Subnets ---
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -44,20 +76,58 @@ resource "aws_route_table" "public" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
+
+  tags = {
+    Name = "public-rt"
+  }
 }
 
-# Associate route table with public subnets
-resource "aws_route_table_association" "a" {
-  subnet_id      = aws_subnet.public_a.id
+# --- Associate Public Subnets ---
+resource "aws_route_table_association" "public_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table_association" "b" {
-  subnet_id      = aws_subnet.public_b.id
-  route_table_id = aws_route_table.public.id
+# --- Route Table for Private Subnets ---
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat.id
+  }
+
+  tags = {
+    Name = "private-rt"
+  }
 }
 
-# IAM Role for Lambda
+# --- Associate Private Subnets ---
+resource "aws_route_table_association" "private_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
+}
+
+# --- Security Group for Lambda ---
+resource "aws_security_group" "lambda_sg" {
+  name        = "lambda-sg"
+  description = "Lambda security group"
+  vpc_id      = aws_vpc.main.id
+
+  # Allow all outbound
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Optional: inbound from RDS if needed
+}
+
+# --- IAM Role for Lambda ---
 resource "aws_iam_role" "lambda_exec" {
   name = "lambda-execution-role"
 
@@ -71,7 +141,6 @@ resource "aws_iam_role" "lambda_exec" {
   })
 }
 
-# Attach policies
 resource "aws_iam_role_policy_attachment" "basic" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -82,21 +151,13 @@ resource "aws_iam_role_policy_attachment" "vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Security Group for Lambda
-resource "aws_security_group" "lambda_sg" {
-  name        = "lambda-sg"
-  description = "Lambda security group"
-  vpc_id      = aws_vpc.main.id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+# --- CloudWatch Log Group ---
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/facebook-json-to-postgres-etl"
+  retention_in_days = 30
 }
 
-# Lambda Function
+# --- Lambda Function ---
 resource "aws_lambda_function" "etl" {
   function_name = "facebook-json-to-postgres-etl"
   role          = aws_iam_role.lambda_exec.arn
@@ -111,15 +172,87 @@ resource "aws_lambda_function" "etl" {
   architectures = ["arm64"]
 
   vpc_config {
-    subnet_ids         = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+    subnet_ids         = [for s in aws_subnet.private : s.id]
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
   environment {
-    variables = {
-      DB_HOST = "example"
-      DB_USER = "example"
-      DB_PASS = "example"
-    }
+  variables = {
+    DB_HOST = aws_db_instance.postgres.address
+    DB_USER = "postgres"
+    DB_PASS = "SuperSecret123!"
+    DB_NAME = "facebook"
   }
+}
+  #depends_on = [aws_nat_gateway.nat]
+  depends_on = [
+  aws_nat_gateway.nat,
+  aws_db_instance.postgres
+  ]
+}
+
+
+
+# ----------------------
+# POSTGRES RDS INSTANCE
+# ----------------------
+
+# Security group for RDS
+resource "aws_security_group" "rds_sg" {
+  name        = "rds-sg"
+  description = "Allow Lambda to access Postgres"
+  vpc_id      = aws_vpc.main.id
+
+  # Inbound: allow Lambda SG to connect to Postgres (port 5432)
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda_sg.id]
+  }
+
+  # Outbound: allow all
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "rds-sg"
+  }
+}
+
+# Subnet group for RDS (must be private subnets)
+resource "aws_db_subnet_group" "rds_subnets" {
+  name       = "rds-subnet-group"
+  subnet_ids = [for s in aws_subnet.private : s.id]
+
+  tags = {
+    Name = "rds-subnet-group"
+  }
+}
+
+# RDS Postgres instance
+resource "aws_db_instance" "postgres" {
+  identifier             = "postgres-etl"
+  allocated_storage      = 10
+  engine                 = "postgres"
+  engine_version         = "17.6"
+  instance_class         = "db.t4g.micro"
+  username               = "postgres"
+  password               = "SuperSecret123!"
+  port                   = 5432
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnets.name
+  vpc_security_group_ids = [aws_security_group.rds_sg.id]
+  multi_az               = false
+  publicly_accessible    = false
+  skip_final_snapshot    = true
+  deletion_protection    = false
+
+  tags = {
+    Name = "postgres-db"
+  }
+  depends_on = [aws_nat_gateway.nat]
 }
