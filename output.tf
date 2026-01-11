@@ -42,3 +42,41 @@ output "rds_security_group_id" {
   description = "ID of the RDS security group"
   value       = aws_security_group.rds_sg.id
 }
+
+# ----------------------
+# Lambda Function
+# ----------------------
+output "lambda_function_name" {
+  description = "Name of the Lambda function"
+  value       = aws_lambda_function.etl.function_name
+}
+
+output "lambda_function_arn" {
+  description = "ARN of the Lambda function"
+  value       = aws_lambda_function.etl.arn
+}
+
+# ----------------------
+# RDS Postgres
+# ----------------------
+output "rds_endpoint" {
+  description = "RDS Postgres endpoint"
+  value       = aws_db_instance.postgres.address
+}
+
+output "rds_port" {
+  description = "RDS Postgres port"
+  value       = aws_db_instance.postgres.port
+}
+
+output "rds_db_name" {
+  description = "RDS database name"
+  value       = aws_db_instance.postgres.db_name
+}
+
+output "rds_username" {
+  description = "RDS master username"
+  value       = aws_db_instance.postgres.username
+}
+
+
