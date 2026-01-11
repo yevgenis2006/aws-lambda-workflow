@@ -79,9 +79,14 @@ resource "null_resource" "init_db" {
 
   provisioner "local-exec" {
     command = <<EOT
+set -e
+
 timeout=300
 elapsed=0
-until PGPASSWORD="SuperSecret123!" psql -h ${aws_db_instance.postgres.endpoint} -p 5432 -U postgres -d postgres -c '\\q'; do
+
+echo "Waiting for RDS..."
+
+until PGPASSWORD="SuperSecret123!" psql -h ${aws_db_instance.postgres.endpoint} -p 5432 -U postgres -d postgres -c '\\q' > /dev/null 2>&1; do
   sleep 10
   elapsed=$((elapsed + 10))
   if [ $elapsed -ge $timeout ]; then
@@ -89,11 +94,24 @@ until PGPASSWORD="SuperSecret123!" psql -h ${aws_db_instance.postgres.endpoint} 
     exit 1
   fi
 done
-# Create database
-PGPASSWORD="SuperSecret123!" psql -h ${aws_db_instance.postgres.endpoint} -p 5432 -U postgres -d postgres -c "CREATE DATABASE facebook;"
+
+echo "RDS is ready"
+
+# Create database if not exists
+PGPASSWORD="SuperSecret123!" psql -h ${aws_db_instance.postgres.endpoint} -p 5432 -U postgres -d postgres <<SQL
+SELECT 'CREATE DATABASE facebook'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'facebook')\\gexec
+SQL
 
 # Initialize tables
-PGPASSWORD="SuperSecret123!" psql -v ON_ERROR_STOP=1 -h ${aws_db_instance.postgres.endpoint} -p 5432 -U postgres -d facebook -f ./init.sql
+PGPASSWORD="SuperSecret123!" psql -v ON_ERROR_STOP=1 \
+  -h ${aws_db_instance.postgres.endpoint} \
+  -p 5432 \
+  -U postgres \
+  -d facebook \
+  -f ./init.sql
+
+echo "Database initialized"
 EOT
   }
 }
