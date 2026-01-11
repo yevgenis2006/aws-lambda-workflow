@@ -80,3 +80,15 @@ output "rds_username" {
 }
 
 
+# ----------------------
+# S3 Bucket Outputs
+# ----------------------
+output "etl_bucket_name" {
+  description = "The name of the ETL S3 bucket"
+  value       = aws_s3_bucket.etl_bucket.id
+}
+
+output "etl_bucket_arn" {
+  description = "The ARN of the ETL S3 bucket"
+  value       = aws_s3_bucket.etl_bucket.arn
+}
