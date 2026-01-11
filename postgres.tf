@@ -60,7 +60,7 @@ resource "aws_db_instance" "postgres" {
   db_subnet_group_name   = aws_db_subnet_group.rds_subnets.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   multi_az               = false
-  publicly_accessible    = false
+  publicly_accessible    = true
   skip_final_snapshot    = true
   deletion_protection    = false
 
