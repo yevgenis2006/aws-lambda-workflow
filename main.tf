@@ -187,7 +187,6 @@ resource "aws_lambda_function" "etl" {
 }
 
   depends_on = [
-  aws_nat_gateway.nat,
   aws_db_instance.postgres
   ]
 }
