@@ -188,7 +188,8 @@ resource "aws_lambda_function" "etl" {
 }
 
   depends_on = [
-  aws_db_instance.postgres
+  aws_db_instance.postgres,
+  null_resource.init_db
   ]
 }
 

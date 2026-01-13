@@ -36,15 +36,25 @@ resource "aws_security_group" "rds_sg" {
   }
 }
 
-# Subnet group for RDS (must be private subnets)
+# Subnet group for RDS (must be public subnets)
 resource "aws_db_subnet_group" "rds_subnets" {
-  name       = "rds-subnet-group"
-  subnet_ids = [for s in aws_subnet.private : s.id]
+  name       = "rds-public-subnets"
+  subnet_ids = [for s in aws_subnet.public : s.id]
 
   tags = {
-    Name = "rds-subnet-group"
+    Name = "rds-public-subnets"
   }
 }
+
+# Subnet group for RDS (must be private subnets)
+#resource "aws_db_subnet_group" "rds_subnets" {
+#  name       = "rds-subnet-group"
+#  subnet_ids = [for s in aws_subnet.private : s.id]
+#
+#  tags = {
+#    Name = "rds-subnet-group"
+#  }
+#}
 
 # RDS Postgres instance
 resource "aws_db_instance" "postgres" {
