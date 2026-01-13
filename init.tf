@@ -2,50 +2,29 @@
 # Initialize DB + Tables
 # ----------------------
 resource "null_resource" "init_db" {
+  # Ensure DB is created only after RDS is available
   depends_on = [aws_db_instance.postgres]
 
   provisioner "local-exec" {
     command = <<EOT
-set -e
+      echo "Waiting for RDS to be ready..."
+      until PGPASSWORD="${var.db_password}" psql -h ${aws_db_instance.postgres.address} -U postgres -d postgres -c "\\q" 2>/dev/null; do
+        sleep 5
+      done
 
-timeout=300
-elapsed=0
+      echo "Creating database 'facebook'..."
+      PGPASSWORD="${var.db_password}" psql -h ${aws_db_instance.postgres.address} -U postgres -d postgres -c "CREATE DATABASE facebook;"
 
-echo "Waiting for RDS..."
-until PGPASSWORD="SuperSecret123!" psql \
-  -h ${aws_db_instance.postgres.address} \
-  -p ${aws_db_instance.postgres.port} \
-  -U postgres \
-  -d postgres \
-  -c '\\q' > /dev/null 2>&1; do
-  sleep 10
-  elapsed=$((elapsed + 10))
-  if [ $elapsed -ge $timeout ]; then
-    echo "RDS is still not available after 5 minutes, exiting..."
-    exit 1
-  fi
-done
-echo "RDS is ready"
-
-# Create database if not exists
-PGPASSWORD="SuperSecret123!" psql \
-  -h ${aws_db_instance.postgres.address} \
-  -p ${aws_db_instance.postgres.port} \
-  -U postgres \
-  -d postgres <<SQL
-SELECT 'CREATE DATABASE facebook'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'facebook')\\gexec
-SQL
-
-# Initialize tables
-PGPASSWORD="SuperSecret123!" psql -v ON_ERROR_STOP=1 \
-  -h ${aws_db_instance.postgres.address} \
-  -p ${aws_db_instance.postgres.port} \
-  -U postgres \
-  -d facebook \
-  -f ./config/schema.sql
-
-echo "Database initialized"
-EOT
+      echo "Initialize tables..."
+      PGPASSWORD="${var.db_password}" psql -h ${aws_db_instance.postgres.address} -U postgres -d facebook -f config/schema.sql
+    EOT
+    interpreter = ["/bin/bash", "-c"]
   }
 }
+
+variable "db_password" {
+  description = "Postgres password"
+  type        = string
+  default     = "SuperSecret123!"
+}
+
